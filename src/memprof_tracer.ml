@@ -5,7 +5,8 @@ type t =
     mutable stopped : bool;
     report_exn : exn -> unit;
     trace : Trace.Writer.t;
-    ext_sampler : Geometric_sampler.t; }
+    ext_sampler : Geometric_sampler.t;
+    mutable memprof : Gc.Memprof.t option }
 
 let curr_active_tracer : t option ref = ref None
 
@@ -64,7 +65,7 @@ let default_report_exn e =
 let start ?(report_exn=default_report_exn) ~sampling_rate trace =
   let ext_sampler = Geometric_sampler.make ~sampling_rate () in
   let s = { trace; locked = false; locked_ext = false; stopped = false; failed = false;
-            report_exn; ext_sampler } in
+            report_exn; ext_sampler; memprof = None } in
   let tracker : (_,_) Gc.Memprof.tracker = {
     alloc_minor = (fun info ->
       if lock_tracer s then begin
@@ -106,16 +107,20 @@ let start ?(report_exn=default_report_exn) ~sampling_rate trace =
         | exception e -> mark_failed s e) } in
   curr_active_tracer := Some s;
   bytes_before_ext_sample := draw_sampler_bytes s;
-  Gc.Memprof.start
-    ~sampling_rate
-    ~callstack_size:max_int
-    tracker;
+  let memprof =
+    Gc.Memprof.start
+      ~sampling_rate
+      ~callstack_size:max_int
+      tracker
+  in
+  s.memprof <- Some memprof;
   s
 
 let stop s =
   if not s.stopped then begin
     s.stopped <- true;
     Gc.Memprof.stop ();
+    Gc.Memprof.discard (Option.get s.memprof);
     if lock_tracer s then begin
       try Trace.Writer.close s.trace with e -> mark_failed s e
     end;

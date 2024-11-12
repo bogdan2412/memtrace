@@ -768,7 +768,7 @@ module Writer = struct
       let slot = convert_raw_backtrace_slot slot in
       match Slot.location slot with
       | None -> tail
-      | Some { filename; line_number; start_char; end_char } ->
+      | Some { filename; line_number; start_char; end_char; end_line = _; end_col = _ } ->
          let defname = match Slot.name slot with Some n -> n | _ -> "??" in
          { filename; line=line_number; start_char; end_char; defname }::tail in
     get_locations (get_raw_backtrace_slot callstack i) |> List.rev
